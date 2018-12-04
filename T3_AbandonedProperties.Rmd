@@ -1,0 +1,231 @@
+---
+title: "Abandoned Properties"
+author: "Sharif Nijim"
+date: "12/01/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# initialize the environment
+rm(list=ls()) 
+# load the necessary libraries
+setwd("/Volumes/GoogleDrive/My Drive/MSDS/04.DV/DV.Final.Project")
+library(lubridate)
+library(reshape2)
+library(tidyverse)
+library(rgdal)
+library(sp)
+library(tmap)
+library(ggmap)
+register_google(key = "AIzaSyArtVYaFH3qvcVP2ufW5_LMMANBwZK2vS4")
+library(leaflet)
+options(scipen=999)
+```
+
+This week, your assignment has three parts:
+
+First, you will load pre-existing spatial data into R and create a quick static map using spplot.  
+Second, you will geocode a small subset of a larger dataset.  
+Finally, you will create a leaflet object from any of these datasets or one of the other examples I have provided you.  
+# Part A: Using R with spatial data (7 points)  
+School Boundaries  
+## 1. Load spatial data from a shapefile into R (3 points)  
+### read in the data
+```{r}
+# read in the data
+# Provide the code you used to load the file  
+ap <- readOGR(".", "Abandoned_Property_Parcels")
+apdf <- as.data.frame(ap@data)
+```
+```{r}
+# display a summary of the data
+# Provide the output of the object summary  
+summary(ap)
+```
+```{r}
+# Show what is in the data
+data.frame(ap)
+```
+### Create a static map showing this layer
+```{r}
+# Create a static map showing this layer
+qtm(ap)
+```
+
+```{r}
+ap.spatial <- SpatialPointsDataFrame(coords = ap@data[,c("Lon","Lat")],
+                                       data = ap@data,
+                                       proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+```
+```{r, eval=FALSE}
+# geocode?
+#3622 EDISON RD, SOUTH BEND, IN 46615
+#ap@data$Address_Nu + ap@data$Street_Nam + ap@data$Zip_Code
+ap.num <- as.character(ap@data$Address_Nu)
+ap.dir <- as.character(ap@data$Direction)
+ap.street <- as.character(ap@data$Street_Nam)
+ap.suff <- as.character(ap@data$Suffix)
+ap.zip <- as.character(ap@data$Zip_Code)
+ap.city <- "South Bend, IN"
+ap.outcome <- melt(as.character(ap@data$Outcome_St))
+#numstreet <- rbind(ad.num, ad.street)
+thelist <- vector()
+for (i in 1:length(ap.num)) {
+  thelist[[i]] <- paste(ap.num[[i]],
+          na.omit(ap.dir[[i]]),
+          ap.street[[i]],
+          ap.suff[[i]],
+          ", South Bend, IN",
+          ap.zip[[i]])
+}
+ap.full.addrs <- melt(thelist)
+ap.geo <- ap.full.addrs
+```
+
+```{r, eval=FALSE}
+# GEOCODE
+# loop through and get the lat/long from the address
+#for (i in 1:nrow(ap.full.addrs)) {
+for (i in 1:nrow(ap.full.addrs)) {
+  tp <- geocode(as.character(ap.full.addrs$value[i]),
+                output = "latlona",
+                source = "google")
+  ap.geo$lon[i] <- as.numeric(tp[1])
+  ap.geo$lat[i] <- as.numeric(tp[2])
+  ap.geo$accuracy[i] <- as.character(tp[3])
+}
+# Fail: 807 N Olive ST , South Bend, IN 46628, line 1212
+for (i in 1213:nrow(ap.full.addrs)) {
+  tp <- geocode(as.character(ap.full.addrs$value[i]),
+                output = "latlona",
+                source = "google")
+  ap.geo$lon[i] <- as.numeric(tp[1])
+  ap.geo$lat[i] <- as.numeric(tp[2])
+  ap.geo$accuracy[i] <- as.character(tp[3])
+}
+
+```
+```{r}
+apdf$lat <- ap.geo$lat
+apdf$lon <- ap.geo$lon
+apdf$accuracy <- ap.geo$accuracy
+```
+```{r, eval=FALSE}
+# save the data
+save(ap.num,
+     ap.dir,
+     ap.street,
+     ap.suff,
+     ap.zip,
+     ap.city,
+     thelist,
+     ap.full.addrs,
+     ap.geo,
+     apdf,
+     file = "Abandoned_Properties_Geocoded.v3.Rdata")
+```
+```{r}
+load("Abandoned_Properties_Geocoded.Rdata")
+```
+
+### Create a static map with the colors of the features reflecting some variable  
+```{r}
+# Create a static map with the colors of the features reflecting some variable  
+ap.ggmap <- fortify(ap, region = 'Outcome_St')
+ap.ggmap <- merge(ap.ggmap, ap@data, by.x = 'id', by.y = 'Structures')
+ggplot() + geom_polygon(data = ap.ggmap,
+                        aes(x=long, y = lat, group = group),
+                        color = "white") + 
+  #coord_fixed(1.3)
+  coord_fixed(1.3) +
+  geom_point(data = apdf,
+             aes(x = lon,
+                 y = lat,
+                 group = Outcome_St,
+                 col = Outcome_St)) 
+
+```
+Submit all of these steps as part of in a pdf document.  
+### Create a pdf of this map
+```{r}
+# Create a static map showing this layer
+pdf(file="./Week3_PartA_Map_2.pdf", title="Week 3 Part A Map 2")
+ggplot() + geom_polygon(data = sb.ggmap,
+                        aes(x=long, y = lat, group = group),
+                        color = "white") + 
+  #coord_fixed(1.3)
+  coord_fixed(1.3) +
+  geom_point(data = park.points,
+             aes(x = Lon,
+                 y = Lat,
+                 group = Park_Type,
+                 col = Park_Type)) 
+
+dev.off()
+```
+  
+# Part B: Geocode a Dataset (South Bend Business Licenses) (5 Points)  
+In GitHub, you will find a subset of the larger dataset (250 records) tagged with your last name.  
+## Use the ggmaps package to geocode your subset.  
+```{r}
+# read in the data
+bl.points <- read.csv('./Nijim_Business_Licenses_27.csv',
+                      stringsAsFactors = FALSE)
+# initialize target data frame
+bl.geo <- bl.points
+# loop through and get the lat/long from the address
+for (i in 1:nrow(bl.points)) {
+  tp <- geocode(bl.points$Full_Address[i],
+                output = "latlona",
+                source = "google")
+  bl.geo$lon[i] <- as.numeric(tp[1])
+  bl.geo$lat[i] <- as.numeric(tp[2])
+  bl.geo$accuracy[i] <- as.character(tp[3])
+}
+```
+## Save the final data frame as a CSV (with the fields names lat and lon and accuracy) Submit this CSV. (3 points)  
+```{r}
+final <- bl.geo %>%
+  select(lat, lon, accuracy)
+write.csv(final,
+          "./Nijim_Business_Licenses_27_geocoded.csv",
+          row.names = FALSE)
+```
+## Submit a PDF file with the code you wrote to do the geocoding and a short justification of the steps you took. (2 points)  
+In order to geocode my assigned file, I first read the CSV into a dataframe.  At that point, I proceeded to explore the dataframe and identified the Full_Address column as having the street, city, state, and zip code data necessary for geocoding all in one column.  I proceeded to loop through the file, geocoding each Full_Address, and storing the resulting latitude, longitude, and address as new columns in the original dataframe.  
+  
+I did encounter an error with my data.  The business at 69700 Walnut Rd only had its street address as well as zip+four, which caused my geocode call to error out.  To get around the error, I edited the original data file and added South Bend, IN between the address and the zip+four in order to get the data into good shape.  
+  
+Finally, I sub-selected the latitude, longitude, and geocoded address as accuracy, then wrote out that information into a CSV file.
+
+# Part C: Make a Leaflet Map (8 points)  
+  
+## Using the examples in the earlier parts of this assignment and in the courseware, use R to make a Leaflet map showing at least one of the datasets from Part A.  
+```{r}
+# Use leaflet to make an interactive map
+# Use the sb object created previously, as well as the park points.
+park.spatial$popup <- paste("<b>", park.spatial$Park_Name,"</b><br>",
+                            "Type:", park.spatial$Park_Type,"<br>",
+                            "Address:", park.spatial$Address, sep = " ")
+pal <- colorFactor(palette = 'Set1', domain = park.spatial$Park_Type)
+leaflet() %>%
+  addTiles() %>%
+  #addMarkers(data = park.spatial, popup = ~popup)
+  addCircleMarkers(data = park.spatial,
+                   popup = ~popup,
+                   color = ~pal(Park_Type),
+                   stroke = 0,
+                   fillOpacity = 1,
+                   radius = 5)
+```
+  
+## Write a paragraph explaining what you are showing, why you made particular design choices, and how it could be useful for the audience/user. (4 points)  
+The above interactive map shows the location of parks in South Bend.  The different colored dots denote differet park types, with purple symbolizing golf courses, green for community parks, red for block parks, yellow for neighborhood parks, pink for zoos, brown for special types, and blue for cemeteries.  Clicking on the indicator for a given park shows the name of the park, the type of park, and its physical address.  If this were to be displayed on a web page and brought up on a mobile device, the address could simply be tapped on to navigate to the location using the mobile device's GPS/map/routing application.  
+  
+Once familiar with the colors, a user could quickly scan the map looking for the park type of his/her choice.  For instance, one of my colleagues is an avid golfer, so he would focus his attention on the location of the purple dots.
+
+## Paste the leaflet code used to generate the map into a PDF file. (4 points)  
+See leaflet code above
