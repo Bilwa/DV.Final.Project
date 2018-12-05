@@ -10,11 +10,14 @@ runtime: shiny
 knitr::opts_chunk$set(echo = TRUE)
 ```
 ```{r load, context="data"}
+# Clear the environemnt
+rm(list=ls()) 
 # Setup
 library(shiny)
 library(markdown)
 library(ggplot2)
 library(leaflet)
+library(reshape2)
 ```
 ```{r}
 # Prep data
@@ -23,7 +26,6 @@ load("./Abandoned_Properties_Geocoded.v3.Rdata")
 abandoned_properties <- apdf
 abandoned_properties$Outcome_St <- as.character(abandoned_properties$Outcome_St)
 abandoned_properties$Direction <- as.character(abandoned_properties$Direction)
-abandoned_properties$Street_Nam <- as.character(abandoned_properties$Street_Nam)
 abandoned_properties$Street_Nam <- as.character(abandoned_properties$Street_Nam)
 abandoned_properties$Suffix <- as.character(abandoned_properties$Suffix)
 abandoned_properties$Code_Enfor <- as.character(abandoned_properties$Code_Enfor)
@@ -37,44 +39,49 @@ abandoned_properties$County_Tax <- as.character(abandoned_properties$County_Tax)
 abandoned_properties$State_Parc <- as.character(abandoned_properties$State_Parc)
 abandoned_properties$Address_Nu <- as.character(abandoned_properties$Address_Nu)
 abandoned_properties$Structures <- as.character(abandoned_properties$Structures)
+abandoned_properties[abandoned_properties$Outcome_St %in% NA,]$Outcome_St <- "Unknown"
+#abandoned_properties[abandoned_properties$Structures %in% NA,]$Structures <- "Unknown"
+#abandoned_properties[abandoned_properties$Zip_Code %in% NA,]$Zip_Code <- "Unknown"
 colnames(abandoned_properties)[1] <- "Outcome"
-abandoned_properties[abandoned_properties$Outcome %in% NA,]$Outcome <- "Unknown"
-abandoned_properties[abandoned_properties$Structures %in% NA,]$Structures <- "Unknown"
+#colnames(abandoned_properties)[10] <- "ZipCode"
 ```
 
 
-```{r example3}
+```{r abandoned_properties}
 # Tab it
 ui <-  navbarPage("Abandoned Properties",
                   tabPanel("Plot",
-                           #selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome","Structures")),
-                           selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome")),
+                           selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome","Zip_Code")),
+                           #selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome")),
                            dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
                            plotOutput(outputId = "distPlot")
                            ),
                   tabPanel("Map",
-                           dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
-                           leafletOutput(outputId = "map")
-                           )
+                           #dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
+                           leafletOutput(outputId = "apMap")
+                           ),
+                  tabPanel("Data",
+                           dataTableOutput("apData"))
 )
 
 server <- function(input, output, session) {
-  data <- eventReactive(input$dates,{
-    return(abandoned_properties[abandoned_properties$Date_of_Ou >= input$dates[1]& abandoned_properties$Date_of_Ou <= input$dates[2],])
-  })
+#  data <- eventReactive(input$dates,{
+#    return(abandoned_properties[abandoned_properties$Date_of_Ou >= input$dates[1]& abandoned_properties$Date_of_Ou <= input$dates[2],])
+#  })
    output$distPlot <-  renderPlot({
-     ggplot(data=data(), aes(x=data()[,input$variable])) +
+     ggplot(data=abandoned_properties,
+            aes(x=abandoned_properties[,input$variable])) +
        geom_bar(stat="count") +
        xlab(input$variable)
      
    })
-   #TODO: Why doesn't this accept date inputs?
-   output$map <-  renderLeaflet({
+   output$apMap <-  renderLeaflet({
      abandoned_properties$popup <- paste("<b>", abandoned_properties$Outcome,"</b><br>",
                             "Structures:", abandoned_properties$Structures,"<br>",
                             "Address:", abandoned_properties$accuracy, sep = " ")
      pal <- colorFactor(palette = 'Set1', domain = abandoned_properties$Outcome)
-     leaflet(data= data())%>%
+     #leaflet(data= data())%>%
+     leaflet(data = abandoned_properties)%>%
        addTiles()%>%
 #       addMarkers(~lon, ~lat, popup = ~OBJECTID)
        addMarkers(data = abandoned_properties,
@@ -85,26 +92,32 @@ server <- function(input, output, session) {
                         color = ~pal(Outcome),
                         stroke = 0,
                         fillOpacity = 1,
-                        radius = 5)
+                        radius = 5) %>%
+       addLegend(pal = pal,
+                 values = ~Outcome,
+                 title = "Outcome",
+                 position = "topright")
    })
    output$texty <- renderText(paste(input$dates[1]))
+   
+   output$apData <- renderDataTable({abandoned_properties})
 }
 shinyApp(ui = ui, server = server)
 
 ```
 
 
-```{r}
-# Interactive map - works
+```{r map_only}
+# Interactive map, date filter works
 ui <- fluidPage(
         dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
-        leafletOutput(outputId = "map")
+        leafletOutput(outputId = "apMap")
 )
 server <- function(input, output) {
   data <- eventReactive(input$dates,{
     return(abandoned_properties[abandoned_properties$Date_of_Ou >= input$dates[1]& abandoned_properties$Date_of_Ou <= input$dates[2],])
   })
-   output$map <-  renderLeaflet({
+   output$apMap <-  renderLeaflet({
      leaflet(data= data())%>%
        addTiles()%>%
        addMarkers(~lon, ~lat, popup = ~OBJECTID)
@@ -114,58 +127,3 @@ server <- function(input, output) {
 shinyApp(ui = ui, server = server)
 ```
 
-```{r debugging}
-# Debugging
-#ui <-  navbarPage("Abandoned Properties",
-#                  tabPanel("Plot",
-#                           #selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome","Structures")),
-#                           selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome")),
-#                           dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
-#                           plotOutput(outputId = "distPlot")
-#                           ),
-#                  tabPanel("Map",
-#                           dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
-#                           leafletOutput(outputId = "map")
-#                           )
-#)
-
-ui <- fluidPage(
-        dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
-        leafletOutput(outputId = "map")
-)
-
-server <- function(input, output, session) {
-  data <- eventReactive(input$dates,{
-    return(abandoned_properties[abandoned_properties$Date_of_Ou >= input$dates[1]& abandoned_properties$Date_of_Ou <= input$dates[2],])
-  })
-   #TODO: Why doesn't this accept date inputs?
-     abandoned_properties$popup <- paste("<b>", abandoned_properties$Outcome,"</b><br>",
-                            "Structures:", abandoned_properties$Structures,"<br>",
-                            "Address:", abandoned_properties$accuracy, sep = " ")
-     pal <- colorFactor(palette = 'Set1', domain = abandoned_properties$Outcome)
-#   output$map <-  renderLeaflet({
-#     leaflet(data= data())%>%
-#       addTiles()%>%
-       #addMarkers(~lon, ~lat, popup = ~OBJECTID)
-#   })
-   output$map <-  renderLeaflet({
-     leaflet(data= data())%>%
-       addTiles()%>%
-#       addMarkers(~lon, ~lat, popup = ~OBJECTID)
-       addMarkers(data = abandoned_properties,
-                  ~lon,
-                  ~lat,
-                  popup = ~OBJECTID
-)#                  clusterOptions = markerClusterOptions()) %>%
-#       addCircleMarkers(data = abandoned_properties,
-#                        popup = ~popup,
-#                        color = ~pal(Outcome),
-#                        stroke = 0,
-#                        fillOpacity = 1,
-#                        radius = 5)
-   })
-   output$texty <- renderText(paste(input$dates[1]))
-}
-shinyApp(ui = ui, server = server)
-
-```
