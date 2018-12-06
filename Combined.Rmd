@@ -1,0 +1,48 @@
+---
+title: "Untitled"
+author: "Bilwa"
+date: "12/5/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("~/Documents/GitHub/DV.Final.Project/")
+
+##Parks and Facilities
+parks <- read.csv("Parks_Locations_and_Features.csv")
+parks <- dplyr::select(parks,Lat,Lon,Zip_Code)
+parks$data <- "Parks"
+colnames(parks) <- c("Lat","Lon","Zip_Code","Data")
+facilities <- read.csv("Public_Facilities.csv")
+facilities <- select(facilities,Lat,Lon,POPL_ZIP)
+facilities$data <- "Facilities"
+colnames(facilities) <- c("Lat","Lon","Zip_Code","Data")
+
+load("./Abandoned_Properties_Geocoded.v3.Rdata")
+apdf <- select(apdf,lat,lon,Zip_Code)
+apdf$data <- "APDF"
+colnames(apdf) <- c("Lat","Lon","Zip_Code","Data")
+
+ load("")
+shootings <- na.omit(shootings)
+shootings <- dplyr::select(shootings,Y,X,ZipCode)
+shootings$data <- "shootings"
+
+street <- read.csv("Street_Lights.csv", na.strings=c(""," "))
+load("./zipCodes.RData")
+street$zipCodes <- zipCodes
+street <- select(street, Lat,Lon,zipCodes)
+street$data <- "StreetLights"
+colnames(street) <- c("Lat","Lon","Zip_Code","Data")
+
+
+Combined <- rbind(parks,facilities,apdf,street)
+save(Combined,file = "Combined.RData")
+
+
+```
+
