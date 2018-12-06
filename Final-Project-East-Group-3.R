@@ -1,3 +1,8 @@
+######################################################
+#FINAL PROJECT - DATA VIZ GROUP 3
+#Sharif Nijim, Bilwa Wagh, Gina O'Riordan, Mitch Speer
+######################################################
+
 #Clear the Environment
 rm(list=ls()) 
 
@@ -11,18 +16,25 @@ library(shinyWidgets)
 library(DT)
 library(tidyverse)
 library(lubridate) 
+library(rgdal)
+library(sp)
+library(ggmap)
+library(tmap)
 
 #DATA
-setwd("C:/Users/Owner/Desktop/Data Science/Data Viz/Data-Viz-2018-Fall-master/FinalProject")
+#setwd("C:/Users/Owner/Desktop/Data Science/Data Viz/Data-Viz-2018-Fall-master/FinalProject")
 
+##Title page overall lat/lon/zip/type dataset
 load("Combined.RData")
+
 
 ##Parks and Facilities
 parks <- read.csv("Parks_Locations_and_Features.csv")
 facilities <- read.csv("Public_Facilities.csv")
 
+
 ##Abandoned Props
-load("./Abandoned_Properties_Geocoded.v3.Rdata")
+load("Abandoned_Properties_Geocoded.v3.Rdata")
 abandoned_properties <- apdf
 abandoned_properties$Outcome_St <- as.character(abandoned_properties$Outcome_St)
 abandoned_properties$Direction <- as.character(abandoned_properties$Direction)
@@ -40,10 +52,8 @@ abandoned_properties$State_Parc <- as.character(abandoned_properties$State_Parc)
 abandoned_properties$Address_Nu <- as.character(abandoned_properties$Address_Nu)
 abandoned_properties$Structures <- as.character(abandoned_properties$Structures)
 abandoned_properties[abandoned_properties$Outcome_St %in% NA,]$Outcome_St <- "Unknown"
-#abandoned_properties[abandoned_properties$Structures %in% NA,]$Structures <- "Unknown"
-#abandoned_properties[abandoned_properties$Zip_Code %in% NA,]$Zip_Code <- "Unknown"
 colnames(abandoned_properties)[1] <- "Outcome"
-#colnames(abandoned_properties)[10] <- "ZipCode"
+
 
 ##Shootings
 #import the data
@@ -65,9 +75,10 @@ shootings.spatial$popup <- paste("<b> Fatality: </b>", shootings.spatial$USER_Fa
 #color palette
 color_1 <- colorFactor(palette = c('navy', 'red'), domain = shootings$USER_Fatal)
 
+
 ##Street Lights
 dat <- read.csv("Street_Lights.csv", na.strings=c(""," "))
-load("./zipCodes.RData")
+load("zipCodes.RData")
 dat$zipCodes <- zipCodes
 
 dat1 <- dat %>% 
@@ -137,7 +148,7 @@ ui <- navbarPage("South Bend: Safety Data",
            leafletOutput("BigMap")
            ),
 
-  ###############SHOOTINGS################
+  ###############SHOOTINGS################-Gina
   tabPanel("Shootings",
            
            # Application title
@@ -171,19 +182,17 @@ ui <- navbarPage("South Bend: Safety Data",
            )
   ),
 
-  ###############ABANDONED PROPS################
+  ###############ABANDONED PROPS################-Sharif
   tabPanel("Abandoned Properties",
            # Application title
            titlePanel("Abandoned Properties"),
           tabsetPanel(
            tabPanel("Map",
-                   #dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
                    leafletOutput(outputId = "apMap")
           ),
            tabPanel("Plot",
                    selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome","Zip_Code")),
-                   #selectInput(inputId = "variable", label = "Variable:",choices = c("Outcome")),
-                   dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01"),
+                   dateRangeInput(inputId = "dates", label = "Date range", startview = "year",start="2013-01-01",end="2018-04-01"),
                    plotOutput(outputId = "distPlot")
           ),
           tabPanel("Raw Data",
@@ -191,16 +200,11 @@ ui <- navbarPage("South Bend: Safety Data",
           )
           )
   ),
-  
  
-  ###############STREET LIGHTS################
+  ###############STREET LIGHTS################-Bilwa
   tabPanel("Street Lights",
            # Application title
            titlePanel("Street Lights"),
-           #sidebarPanel(
-           #  selectInput(inputId = "zip_code",label = "Zip Code",choices = zip.list, selected = "All")
-           #),
-           
            tabsetPanel(
              tabPanel("Map",sidebarPanel(
                selectInput(inputId = "zip_code",label = "Zip Code",choices = zip.list, selected = "All")
@@ -212,7 +216,7 @@ ui <- navbarPage("South Bend: Safety Data",
            
   ),
   
-  ###############PARKS AND FACILITIES################ 
+  ###############PARKS AND FACILITIES################-Mitch
   tabPanel("Parks and Facilities",
            # Application title
            titlePanel("Parks and Facilities"),
@@ -233,6 +237,9 @@ ui <- navbarPage("South Bend: Safety Data",
   
 )
 
+
+
+
 ## Define server logic
 server <- function(input, output) {
 
@@ -244,11 +251,6 @@ server <- function(input, output) {
       baseGroups = c("Black/White","Basic"),
       overlayGroups= c("Shootings","Abandoned Properties","Parks","Facilities","StreetLights"),
       options = layersControlOptions(collapsed = FALSE))%>%
-      
-    #addProviderTiles(providers$CartoDB.Positron) %>%
-    #addTiles()%>%
-    #addProviderTiles(providers$Esri.WorldImagery)  %>%
-    #addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
     addCircleMarkers(data = Combined[Combined$Data=="StreetLights",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="StreetLights") %>%
     addCircleMarkers(data = Combined[Combined$Data=="Facilities",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="Facilities") %>%
     addCircleMarkers(data = Combined[Combined$Data=="Parks",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="Parks") %>%
@@ -260,24 +262,10 @@ server <- function(input, output) {
     mapAll
   })
   
-  observe(
-    dataSelect <- if(is.null(input$dataType)) {
-      unique(Combined$Data)
-    } else {
-      input$dataType
-    }
-  
-#  CombinedNew <- Combined %>% 
-#      filter(Combined$Data %in% dataSelect)
-  )
-  
-  
 ########PARKS and FACILITIES################
     #Define the leaflet map object
-    mapParksFacs <- leaflet(parks)%>%#filter(parks,parks$Zip_Code==c(input$zip)))  %>%
-    addTiles()%>%
-      #addProviderTiles(providers$Esri.WorldImagery)  %>%
-      #addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
+    mapParksFacs <- leaflet(parks)%>%
+      addTiles()%>%
       addCircleMarkers(data = parks.spatial,popup = ~popup, color=~pal3(Park_Type), stroke = 0, fillOpacity = 1, radius = 6) %>%
       addLegend(pal=pal3,values=~Park_Type,title = "Park Type",position="topleft") %>%
       addCircleMarkers(data = facilities.spatial, popup = ~popup, color=~pal4(facilities$POPL_TYPE), stroke = 0, fillOpacity = 1, radius = ifelse(facilities$POPL_TYPE=="POLICE STATION",9,3)) %>%
@@ -360,7 +348,6 @@ server <- function(input, output) {
     ###To make other visualizations reactive###
       ###Parks###
       reactParks <- reactive({
-        #req(input$zip)
         if(is.null(input$zip)) {
           df <- parks
         } else if(sum(parks$Zip_Code %in% input$zip)>0) {
@@ -371,7 +358,6 @@ server <- function(input, output) {
       })
       ###Facilities###
       reactFacs <- reactive({
-        #req(input$zip)
         if(is.null(input$zip) | (sum(facilities$POPL_ZIP %in% input$zip)<1)) {
           df <- facilities
         } else {
@@ -417,21 +403,32 @@ server <- function(input, output) {
          return(NULL)
        reactFacs()
        })
-   
+
 ########ABANDONED PROPERTIES################   
+   apReact <- reactive({
+     df <- abandoned_properties[is.na(abandoned_properties$Date_of_Ou)==FALSE & abandoned_properties$Date_of_Ou<input$dates[2] & abandoned_properties$Date_of_Ou>input$dates[1],]
+   })
+     
    output$distPlot <-  renderPlot({
-     ggplot(data=abandoned_properties,
-            aes(x=abandoned_properties[,input$variable])) +
+     if(input$variable=="Outcome") {
+       ggplot(data=apReact(),
+            aes(x=reorder(apReact()$Outcome,-table(apReact()$Outcome)[apReact()$Outcome]))) +
        geom_bar(stat="count") +
        xlab(input$variable)
-     
+     } else {
+       ggplot(data=apReact(),
+            aes(x=reorder(apReact()$Zip_Code,-table(apReact()$Zip_Code)[apReact()$Zip_Code]))) +
+       geom_bar(stat="count") +
+       xlab(input$variable)
+     }
    })
+       
    output$apMap <-  renderLeaflet({
      abandoned_properties$popup <- paste("<b>", abandoned_properties$Outcome,"</b><br>",
                                          "Structures:", abandoned_properties$Structures,"<br>",
                                          "Address:", abandoned_properties$accuracy, sep = " ")
      pal <- colorFactor(palette = 'Set1', domain = abandoned_properties$Outcome)
-     #leaflet(data= data())%>%
+
      leaflet(data = abandoned_properties)%>%
        addTiles()%>%
        #       addMarkers(~lon, ~lat, popup = ~OBJECTID)
@@ -472,8 +469,6 @@ server <- function(input, output) {
      
      shootings_map <- leaflet(shootings) %>%
        addTiles()%>%
-       #addProviderTiles(providers$Esri.WorldImagery) %>%
-       #addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
        addCircleMarkers(data = shootings_data, popup = ~popup, color=~color_1(USER_Fatal), stroke = 0, fillOpacity=1) %>%
        addLegend("bottomright", pal = color_1, values = ~USER_Fatal,
                  title = 'Fatality',
@@ -483,9 +478,6 @@ server <- function(input, output) {
    
    #THE HISTOGRAM
    #reactive data for the histogram
-   #data <- reactive(input$year, {return(shootings[shootings$USER_Year >= input$year[1] & shootings$USER_Year <= input$year[2], ])
-   # })
-   
    output$graphShoot <- renderPlot(
      ggplot(data = map_data_react()@data, aes(x = USER_Fatal,fill=USER_Fatal)) + 
        geom_bar(stat = 'count') + 
