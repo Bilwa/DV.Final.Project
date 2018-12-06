@@ -22,15 +22,16 @@ dat1 <- dat %>%
   mutate(Ownership = as.character(Ownership),
          Ownership = ifelse(is.na(Ownership), "Unknown", Ownership),
          Ownership = as.factor(Ownership))   %>% 
-  mutate(insp = as.Date(Inspect_Date))
+  mutate(insp = as.Date(Inspect_Date)) %>% 
+  filter(!is.na(Ownership))
 
 zip.list <- unique(dat$zipCodes)
 zip.list <- zip.list[zip.list !="Postcode Not Found" ]
 zip.list <- append(zip.list,"All")
 
 dat1$popup <- paste("<b>",dat1$Ownership,"</b><br>",
-                    "Type: ",dat1$Service,"<br>",
-                    "License Status: ",dat1$Ownership,sep ="")
+                    "Service: ",dat1$Service,"<br>",
+                    "Ownership: ",dat1$Ownership,sep ="")
 pal <- colorFactor(palette = 'Set2', domain = dat1$Ownership)
 
  
@@ -47,21 +48,26 @@ ui <- fluidPage(
        selectInput(inputId = "zip_code",label = "Zip Code",choices = zip.list, selected = "All")
      ), leafletOutput("myMap")) ,
    tabPanel("Inspection",plotOutput("InspectPlot")),
-   tabPanel("Lumens",plotOutput("LumenPlot"))
+   tabPanel("Lumens",plotOutput("LumenPlot")),
+   tabPanel("Raw Data", dataTableOutput("table_street"))
      
   )
 )
 
 # Define server logic  
 server <- function(input, output) {
-   
+  
+  pal4 <- colorFactor(palette = c("lightseagreen", "salmon","plum","palegoldenrod"), domain = c("AEP","City of South Bend", "Unknown","Other" )) 
+  
    output$myMap<- renderLeaflet({
     if (input$zip_code != "All"){
       dat1 <-filter(dat1,zipCodes == input$zip_code)
     }
+     
     leaflet()  %>%
     addTiles()  %>%
-    addCircleMarkers(data = dat1, popup = ~popup, color = ~pal(Ownership), stroke = 0, fillOpacity = 1, radius = 4)
+    addCircleMarkers(data = dat1, popup = ~popup, color = ~pal4(dat1$Ownership), stroke = 0, fillOpacity = 1, radius = 4)  %>% 
+    addLegend(pal=pal4,values=dat1$Ownership,title = "Ownership",position="topleft") 
     
    })
    
@@ -87,6 +93,10 @@ server <- function(input, output) {
      ggplot(aes(x=Lumens, y=cnt, fill = Service))+geom_col()+coord_flip()
    })
    
+   dat_street <- dat %>% 
+     select(zipCodes, Ownership,Service,Hand_Hold,Inspect_Date,Pole_Type,Lumens)
+  
+   output$table_street <- renderDataTable(dat_street)
 }
 
 # Run the application 
