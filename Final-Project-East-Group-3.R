@@ -15,6 +15,8 @@ library(lubridate)
 #DATA
 setwd("C:/Users/Owner/Desktop/Data Science/Data Viz/Data-Viz-2018-Fall-master/FinalProject")
 
+load("Combined.RData")
+
 ##Parks and Facilities
 parks <- read.csv("Parks_Locations_and_Features.csv")
 facilities <- read.csv("Public_Facilities.csv")
@@ -118,30 +120,57 @@ facilities.spatial$popup <- paste("<b>",facilities.spatial$POPL_NAME,"</b><br>",
 pal3 <- colorFactor(palette = 'Greens', domain =parks$Park_Type)
 pal4 <- colorFactor(palette = c("red","tan","navy"), domain = c("FIRE STATION","POLICE STATION","LIBRARY"))
 
-#APP
+pal6 <- colorFactor(palette = c("brown","skyblue","green","red","tan"), domain = c("Shootings","Parks","StreetLights","Facilities","Abandoned Properties"))
 
+Combined$Zip_Code[Combined$Zip_Code=="Postcode Not Found"] <- NA
+Combined$Zip_Code[Combined$Zip_Code=="46601:46615"] <-"46601"
+Combined <- na.omit(Combined)
+
+#APP
 ## Define UI for application
-ui <- navbarPage("South Bend City Data",
-                 
-  ###############PARKS AND FACILITIES################ 
-  tabPanel("Parks and Facilities",
-         # Application title
-         titlePanel("Parks and Facilities"),
-         #Main panel graphics
-         mainPanel(
-           selectInput('zip', 'Zip Code', unique(Zips$.),multiple = TRUE,selectize=TRUE),
-            tabsetPanel(
-              tabPanel("Map",leafletOutput("ParkFacsMap")),
-              tabPanel("Parks",plotOutput("barPar")),
-              tabPanel("Parks Data",dataTableOutput("tabPar")),
-              tabPanel("Facilities",plotOutput("barFac")),
-              tabPanel("Facilities Data",dataTableOutput("tabFac"))
-              
-            )
-            
-            )
-   ),
-  
+ui <- navbarPage("South Bend: Safety Data",
+    
+                              
+  ###############TITLE PAGE###############
+  tabPanel("Main",
+           titlePanel("South Bend Safety Data"),
+           leafletOutput("BigMap")
+           ),
+
+  ###############SHOOTINGS################
+  tabPanel("Shootings",
+           
+           # Application title
+           titlePanel("Criminally Assaulted Shootings"),
+           
+           #select dropdown picker for day of week
+           pickerInput('weekday', 'Day of the Week:',
+                       choices = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"),
+                       options = list('actions-box' = TRUE, size = 10, 'selected-text-format' = "count > 3"),
+                       multiple = TRUE),
+           
+           #sidebar layout details
+           sidebarLayout(
+             sidebarPanel(
+               #slider adjustments
+               sliderInput('year', "Year:",
+                           min = min(shootings$USER_Year), max = max(shootings$USER_Year),
+                           timeFormat = "%Y", sep = "", step = 1,ticks = 3,
+                           value = c(max(shootings$USER_Year), max(shootings$USER_Year))
+               )
+             ),
+             
+             #tabs of the dashboard
+             mainPanel(
+               tabsetPanel(
+                 tabPanel("Map",leafletOutput("mymapShoot")),
+                 tabPanel("Graph", plotOutput("graphShoot")),
+                 tabPanel("Raw Data", DT::dataTableOutput("tableShoot"))
+               )
+             )
+           )
+  ),
+
   ###############ABANDONED PROPS################
   tabPanel("Abandoned Properties",
            # Application title
@@ -163,40 +192,7 @@ ui <- navbarPage("South Bend City Data",
           )
   ),
   
-  ###############SHOOTINGS################
-  tabPanel("Shootings",
-           
-         # Application title
-         titlePanel("Criminally Assaulted Shootings"),
-         
-         #select dropdown picker for day of week
-         pickerInput('weekday', 'Day of the Week:',
-                     choices = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"),
-                     options = list('actions-box' = TRUE, size = 10, 'selected-text-format' = "count > 3"),
-                     multiple = TRUE),
-         
-         #sidebar layout details
-         sidebarLayout(
-           sidebarPanel(
-             #slider adjustments
-             sliderInput('year', "Year:",
-                         min = min(shootings$USER_Year), max = max(shootings$USER_Year),
-                         timeFormat = "%Y", sep = "", step = 1,ticks = 3,
-                         value = c(max(shootings$USER_Year), max(shootings$USER_Year))
-             )
-           ),
-           
-           #tabs of the dashboard
-           mainPanel(
-             tabsetPanel(
-               tabPanel("Map",leafletOutput("mymapShoot")),
-               tabPanel("Graph", plotOutput("graphShoot")),
-               tabPanel("Raw Data", DT::dataTableOutput("tableShoot"))
-             )
-           )
-         )
-  ),
-  
+ 
   ###############STREET LIGHTS################
   tabPanel("Street Lights",
            # Application title
@@ -214,17 +210,74 @@ ui <- navbarPage("South Bend City Data",
              tabPanel("Raw Data", dataTableOutput("table_street"))
            )
            
+  ),
+  
+  ###############PARKS AND FACILITIES################ 
+  tabPanel("Parks and Facilities",
+           # Application title
+           titlePanel("Parks and Facilities"),
+           #Main panel graphics
+           mainPanel(
+             selectInput('zip', 'Zip Code', unique(Zips$.),multiple = TRUE,selectize=TRUE),
+             tabsetPanel(
+               tabPanel("Map",leafletOutput("ParkFacsMap")),
+               tabPanel("Parks",plotOutput("barPar")),
+               tabPanel("Parks Data",dataTableOutput("tabPar")),
+               tabPanel("Facilities",plotOutput("barFac")),
+               tabPanel("Facilities Data",dataTableOutput("tabFac"))
+               
+             )
+             
+           )
   )
+  
 )
 
 ## Define server logic
 server <- function(input, output) {
+
+  ###########TITLE PAGE############
+  mapAll <- leaflet(Combined)%>%
+    addTiles(group="Basic")%>%
+    addProviderTiles(providers$OpenStreetMap.BlackAndWhite) %>%
+    addLayersControl(
+      baseGroups = c("Black/White","Basic"),
+      overlayGroups= c("Shootings","Abandoned Properties","Parks","Facilities","StreetLights"),
+      options = layersControlOptions(collapsed = FALSE))%>%
+      
+    #addProviderTiles(providers$CartoDB.Positron) %>%
+    #addTiles()%>%
+    #addProviderTiles(providers$Esri.WorldImagery)  %>%
+    #addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
+    addCircleMarkers(data = Combined[Combined$Data=="StreetLights",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="StreetLights") %>%
+    addCircleMarkers(data = Combined[Combined$Data=="Facilities",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="Facilities") %>%
+    addCircleMarkers(data = Combined[Combined$Data=="Parks",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="Parks") %>%
+    addCircleMarkers(data = Combined[Combined$Data=="Abandoned Properties",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="Abandoned Properties") %>%
+    addCircleMarkers(data = Combined[Combined$Data=="Shootings",], color=~pal6(Data), stroke = 1, fillOpacity = 0.3, radius = 3,group="Shootings") %>%
+    addLegend(pal=pal6,values=~Data,title = "Data Type",position="topleft")
+  
+  output$BigMap <- renderLeaflet({
+    mapAll
+  })
+  
+  observe(
+    dataSelect <- if(is.null(input$dataType)) {
+      unique(Combined$Data)
+    } else {
+      input$dataType
+    }
+  
+#  CombinedNew <- Combined %>% 
+#      filter(Combined$Data %in% dataSelect)
+  )
+  
   
 ########PARKS and FACILITIES################
     #Define the leaflet map object
     mapParksFacs <- leaflet(parks)%>%#filter(parks,parks$Zip_Code==c(input$zip)))  %>%
-      addProviderTiles(providers$Esri.WorldImagery)  %>%
-      addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
+    addTiles()%>%
+      #addProviderTiles(providers$Esri.WorldImagery)  %>%
+      #addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
       addCircleMarkers(data = parks.spatial,popup = ~popup, color=~pal3(Park_Type), stroke = 0, fillOpacity = 1, radius = 6) %>%
       addLegend(pal=pal3,values=~Park_Type,title = "Park Type",position="topleft") %>%
       addCircleMarkers(data = facilities.spatial, popup = ~popup, color=~pal4(facilities$POPL_TYPE), stroke = 0, fillOpacity = 1, radius = ifelse(facilities$POPL_TYPE=="POLICE STATION",9,3)) %>%
@@ -418,8 +471,9 @@ server <- function(input, output) {
      shootings_data <- map_data_react()
      
      shootings_map <- leaflet(shootings) %>%
-       addProviderTiles(providers$Esri.WorldImagery) %>%
-       addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
+       addTiles()%>%
+       #addProviderTiles(providers$Esri.WorldImagery) %>%
+       #addProviderTiles(providers$Esri.NatGeoWorldMap, options = providerTileOptions(opacity = 1)) %>%
        addCircleMarkers(data = shootings_data, popup = ~popup, color=~color_1(USER_Fatal), stroke = 0, fillOpacity=1) %>%
        addLegend("bottomright", pal = color_1, values = ~USER_Fatal,
                  title = 'Fatality',
